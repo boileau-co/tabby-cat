@@ -17,6 +17,21 @@ define('TABBY_CAT_PATH', plugin_dir_path(__FILE__));
 define('TABBY_CAT_URL', plugin_dir_url(__FILE__));
 
 /**
+ * Initialize Plugin Update Checker for GitHub updates
+ */
+require TABBY_CAT_PATH . 'lib/plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+$tabby_cat_update_checker = PucFactory::buildUpdateChecker(
+    'https://github.com/Boileau-co/tabby-cat/',
+    __FILE__,
+    'tabby-cat'
+);
+
+// Set the branch to check for updates (defaults to 'main')
+$tabby_cat_update_checker->setBranch('main');
+
+/**
  * Get plugin settings with defaults
  */
 function tabby_cat_get_settings() {
