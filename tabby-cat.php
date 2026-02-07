@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Tabby Cat
  * Description: A two-tier master-detail display component with customizable content type and categories.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: Cozy Cat
  * Text Domain: tabby-cat
  */
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('TABBY_CAT_VERSION', '1.2.0');
+define('TABBY_CAT_VERSION', '1.3.0');
 define('TABBY_CAT_PATH', plugin_dir_path(__FILE__));
 define('TABBY_CAT_URL', plugin_dir_url(__FILE__));
 
@@ -1060,6 +1060,18 @@ function tabby_cat_get_plugin_installation() {
  */
 function tabby_cat_get_plugin_changelog() {
     return '
+        <h3>Version 1.3.0</h3>
+        <p><em>Released: ' . date('F j, Y') . '</em></p>
+        <ul>
+            <li>Mobile breakpoint raised from 599px to 769px for tablet support</li>
+            <li>Desktop detail area stacks visual above text below 1280px</li>
+            <li>Added image lightbox with gallery navigation</li>
+            <li>Video autoplay on thumbnail click</li>
+            <li>Mobile: first item content shown by default</li>
+            <li>Mobile: item title displayed in content area</li>
+            <li>Mobile: horizontal and vertical dividers for layout clarity</li>
+        </ul>
+
         <h3>Version 1.2.0</h3>
         <p><em>Released: ' . date('F j, Y') . '</em></p>
         <ul>
@@ -1368,6 +1380,7 @@ function tabby_cat_shortcode($atts) {
                                 <?php echo !$first_item ? 'hidden' : ''; ?>
                             >
                                 <div class="tabby-cat__detail-content">
+                                    <h3 class="tabby-cat__detail-title"><?php echo esc_html($title); ?></h3>
                                     <div class="tabby-cat__detail-text">
                                         <div class="tabby-cat__detail-description">
                                             <?php echo wp_kses_post($description); ?>
@@ -1386,8 +1399,9 @@ function tabby_cat_shortcode($atts) {
                                                 $image = get_field('tabby_image', $item->ID);
                                                 if ($image && is_array($image)) {
                                                     $img_url = isset($image['sizes']['large']) ? $image['sizes']['large'] : $image['url'];
+                                                    $img_full = $image['url'];
                                                     $img_alt = isset($image['alt']) && !empty($image['alt']) ? $image['alt'] : $title;
-                                                    echo '<img src="' . esc_url($img_url) . '" alt="' . esc_attr($img_alt) . '" class="tabby-cat__image" loading="lazy">';
+                                                    echo '<img src="' . esc_url($img_url) . '" alt="' . esc_attr($img_alt) . '" class="tabby-cat__image" loading="lazy" data-full-src="' . esc_url($img_full) . '">';
                                                 }
                                                 break;
                                                 
@@ -1402,8 +1416,9 @@ function tabby_cat_shortcode($atts) {
                                                     echo '<div class="tabby-cat__gallery-track">';
                                                     foreach ($gallery as $img) {
                                                         $img_url = isset($img['sizes']['large']) ? $img['sizes']['large'] : $img['url'];
+                                                        $img_full = $img['url'];
                                                         $img_alt = isset($img['alt']) && !empty($img['alt']) ? $img['alt'] : $title;
-                                                        echo '<img src="' . esc_url($img_url) . '" alt="' . esc_attr($img_alt) . '" class="tabby-cat__gallery-image" loading="lazy">';
+                                                        echo '<img src="' . esc_url($img_url) . '" alt="' . esc_attr($img_alt) . '" class="tabby-cat__gallery-image" loading="lazy" data-full-src="' . esc_url($img_full) . '">';
                                                     }
                                                     echo '</div>';
                                                     echo '<div class="tabby-cat__gallery-nav">';
