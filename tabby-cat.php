@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Tabby Cat
  * Description: A two-tier master-detail display component with customizable content type and categories.
- * Version: 1.4.0
+ * Version: 1.4.1
  * Author: Cozy Cat
  * Text Domain: tabby-cat
  */
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('TABBY_CAT_VERSION', '1.4.0');
+define('TABBY_CAT_VERSION', '1.4.1');
 define('TABBY_CAT_PATH', plugin_dir_path(__FILE__));
 define('TABBY_CAT_URL', plugin_dir_url(__FILE__));
 
@@ -1218,8 +1218,19 @@ function tabby_cat_get_plugin_installation() {
  */
 function tabby_cat_get_plugin_changelog() {
     return '
-        <h3>Version 1.4.0</h3>
+        <h3>Version 1.4.1</h3>
         <p><em>Released: ' . date('F j, Y') . '</em></p>
+        <ul>
+            <li>Tags field upgraded to checkbox selector with add-new option</li>
+            <li>Category filter dropdown on admin list page</li>
+            <li>Description text on category list page</li>
+            <li>Hidden redundant Re-Order submenu</li>
+            <li>Fixed changelog dates for past versions</li>
+            <li>Fixed duplicate View Details link on plugins page</li>
+        </ul>
+
+        <h3>Version 1.4.0</h3>
+        <p><em>Released: February 18, 2026</em></p>
         <ul>
             <li>Added tag filtering for category tabs via shortcode <code>tag</code> attribute</li>
             <li>Tags field on category add/edit screens for assigning comma-separated tags</li>
