@@ -139,25 +139,71 @@ add_action('init', 'tabby_cat_register_taxonomy');
 /**
  * Category Tag Meta (for shortcode filtering)
  */
+function tabby_cat_get_all_tags() {
+    $all_tags = array();
+    $terms = get_terms(array(
+        'taxonomy'   => 'tabby_cat_category',
+        'hide_empty' => false,
+    ));
+    if (!is_wp_error($terms)) {
+        foreach ($terms as $term) {
+            $tags_string = get_term_meta($term->term_id, 'tabby_cat_tags', true);
+            if (!empty($tags_string)) {
+                $tags = array_map('trim', explode(',', $tags_string));
+                foreach ($tags as $tag) {
+                    if (!empty($tag)) {
+                        $all_tags[] = $tag;
+                    }
+                }
+            }
+        }
+    }
+    $all_tags = array_unique($all_tags);
+    sort($all_tags);
+    return $all_tags;
+}
+
+function tabby_cat_render_tag_checkboxes($selected_tags = array()) {
+    $all_tags = tabby_cat_get_all_tags();
+    $selected_lower = array_map('strtolower', $selected_tags);
+
+    if (!empty($all_tags)) : ?>
+        <fieldset style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-bottom: 8px;">
+            <?php foreach ($all_tags as $tag) : ?>
+                <label style="font-weight: normal;">
+                    <input type="checkbox" name="tabby_cat_tags_checked[]" value="<?php echo esc_attr($tag); ?>"
+                        <?php checked(in_array(strtolower($tag), $selected_lower, true)); ?>>
+                    <?php echo esc_html($tag); ?>
+                </label>
+            <?php endforeach; ?>
+        </fieldset>
+    <?php endif; ?>
+    <label style="font-weight: normal; display: flex; align-items: center; gap: 6px;">
+        <span><?php echo empty($all_tags) ? 'Tag name:' : 'Add new:'; ?></span>
+        <input type="text" name="tabby_cat_tags_new" value="" style="width: 200px;">
+    </label>
+    <p class="description">Select tags for shortcode filtering, or type a new one.</p>
+    <?php
+}
+
 function tabby_cat_category_add_tag_field() {
     ?>
     <div class="form-field">
-        <label for="tabby_cat_tags">Tags</label>
-        <input type="text" name="tabby_cat_tags" id="tabby_cat_tags" value="">
-        <p class="description">Comma-separated tags for shortcode filtering. Example: homepage, featured</p>
+        <label>Tags</label>
+        <?php tabby_cat_render_tag_checkboxes(); ?>
     </div>
     <?php
 }
 add_action('tabby_cat_category_add_form_fields', 'tabby_cat_category_add_tag_field');
 
 function tabby_cat_category_edit_tag_field($term) {
-    $tags = get_term_meta($term->term_id, 'tabby_cat_tags', true);
+    $tags_string = get_term_meta($term->term_id, 'tabby_cat_tags', true);
+    $selected = !empty($tags_string) ? array_map('trim', explode(',', $tags_string)) : array();
     ?>
     <tr class="form-field">
-        <th scope="row"><label for="tabby_cat_tags">Tags</label></th>
+        <th scope="row"><label>Tags</label></th>
         <td>
-            <input type="text" name="tabby_cat_tags" id="tabby_cat_tags" value="<?php echo esc_attr($tags); ?>">
-            <p class="description">Comma-separated tags for shortcode filtering. Example: homepage, featured</p>
+            <?php tabby_cat_render_tag_checkboxes($selected); ?>
         </td>
     </tr>
     <?php
@@ -165,10 +211,22 @@ function tabby_cat_category_edit_tag_field($term) {
 add_action('tabby_cat_category_edit_form_fields', 'tabby_cat_category_edit_tag_field');
 
 function tabby_cat_save_tag_meta($term_id) {
-    if (isset($_POST['tabby_cat_tags'])) {
-        $tags = sanitize_text_field($_POST['tabby_cat_tags']);
-        update_term_meta($term_id, 'tabby_cat_tags', $tags);
+    $tags = array();
+
+    if (!empty($_POST['tabby_cat_tags_checked'])) {
+        $tags = array_map('sanitize_text_field', $_POST['tabby_cat_tags_checked']);
     }
+
+    if (!empty($_POST['tabby_cat_tags_new'])) {
+        $new_tags = array_map('trim', explode(',', sanitize_text_field($_POST['tabby_cat_tags_new'])));
+        foreach ($new_tags as $new_tag) {
+            if (!empty($new_tag) && !in_array(strtolower($new_tag), array_map('strtolower', $tags), true)) {
+                $tags[] = $new_tag;
+            }
+        }
+    }
+
+    update_term_meta($term_id, 'tabby_cat_tags', implode(', ', $tags));
 }
 add_action('created_tabby_cat_category', 'tabby_cat_save_tag_meta');
 add_action('edited_tabby_cat_category', 'tabby_cat_save_tag_meta');
@@ -715,6 +773,64 @@ function tabby_cat_category_column_content($content, $column_name, $term_id) {
 add_filter('manage_tabby_cat_category_custom_column', 'tabby_cat_category_column_content', 10, 3);
 
 /**
+ * Add description text to category list page
+ */
+function tabby_cat_category_description() {
+    $screen = get_current_screen();
+    if ($screen && $screen->taxonomy === 'tabby_cat_category') {
+        echo '<p style="margin-bottom: 1em; color: #646970;">These are the top-tier categories displayed as the horizontal tabs at the top of the Tabby Cat component.</p>';
+    }
+}
+add_action('tabby_cat_category_pre_add_form', 'tabby_cat_category_description');
+
+/**
+ * Add category filter dropdown to CPT list page
+ */
+function tabby_cat_admin_filter_dropdown() {
+    global $typenow;
+    if ($typenow !== 'tabby_cat_item') {
+        return;
+    }
+    $settings = tabby_cat_get_settings();
+    $selected = isset($_GET['tabby_cat_category']) ? sanitize_text_field($_GET['tabby_cat_category']) : '';
+    $terms = get_terms(array(
+        'taxonomy'   => 'tabby_cat_category',
+        'hide_empty' => true,
+    ));
+    if (!empty($terms) && !is_wp_error($terms)) {
+        echo '<select name="tabby_cat_category">';
+        echo '<option value="">' . esc_html('All ' . $settings['tax_plural']) . '</option>';
+        foreach ($terms as $term) {
+            printf(
+                '<option value="%s" %s>%s (%d)</option>',
+                esc_attr($term->slug),
+                selected($selected, $term->slug, false),
+                esc_html($term->name),
+                $term->count
+            );
+        }
+        echo '</select>';
+    }
+}
+add_action('restrict_manage_posts', 'tabby_cat_admin_filter_dropdown');
+
+/**
+ * Hide Re-Order submenu page (added by reorder plugins)
+ */
+function tabby_cat_hide_reorder_submenu() {
+    global $submenu;
+    $parent = 'edit.php?post_type=tabby_cat_item';
+    if (!empty($submenu[$parent])) {
+        foreach ($submenu[$parent] as $index => $item) {
+            if (stripos($item[0], 're-order') !== false || stripos($item[0], 'reorder') !== false) {
+                unset($submenu[$parent][$index]);
+            }
+        }
+    }
+}
+add_action('admin_menu', 'tabby_cat_hide_reorder_submenu', 999);
+
+/**
  * Sync post title with item title field
  */
 function tabby_cat_sync_title($post_id) {
@@ -973,23 +1089,6 @@ function tabby_cat_check_acf() {
 add_action('admin_init', 'tabby_cat_check_acf');
 
 /**
- * Add "View details" link to plugins page
- */
-function tabby_cat_plugin_row_meta($links, $file) {
-    if (plugin_basename(__FILE__) === $file) {
-        $links[] = sprintf(
-            '<a href="%s" class="thickbox open-plugin-details-modal" aria-label="%s" data-title="%s">%s</a>',
-            esc_url(admin_url('plugin-install.php?tab=plugin-information&plugin=tabby-cat&TB_iframe=true&width=600&height=550')),
-            esc_attr__('More information about Tabby Cat'),
-            esc_attr__('Tabby Cat'),
-            __('View details')
-        );
-    }
-    return $links;
-}
-add_filter('plugin_row_meta', 'tabby_cat_plugin_row_meta', 10, 2);
-
-/**
  * Provide plugin information for the details modal
  */
 function tabby_cat_plugin_info($result, $action, $args) {
@@ -1128,7 +1227,7 @@ function tabby_cat_get_plugin_changelog() {
         </ul>
 
         <h3>Version 1.3.0</h3>
-        <p><em>Released: ' . date('F j, Y') . '</em></p>
+        <p><em>Released: February 7, 2026</em></p>
         <ul>
             <li>Mobile breakpoint raised from 599px to 769px for tablet support</li>
             <li>Desktop detail area stacks visual above text below 1280px</li>
@@ -1140,7 +1239,7 @@ function tabby_cat_get_plugin_changelog() {
         </ul>
 
         <h3>Version 1.2.0</h3>
-        <p><em>Released: ' . date('F j, Y') . '</em></p>
+        <p><em>Released: February 6, 2026</em></p>
         <ul>
             <li>Removed container padding for flush-left alignment</li>
             <li>First category tab now flush left (no left padding)</li>
