@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Tabby Cat
  * Description: A two-tier master-detail display component with customizable content type and categories.
- * Version: 1.4.1
+ * Version: 1.4.2
  * Author: Cozy Cat
  * Text Domain: tabby-cat
  */
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('TABBY_CAT_VERSION', '1.4.1');
+define('TABBY_CAT_VERSION', '1.4.2');
 define('TABBY_CAT_PATH', plugin_dir_path(__FILE__));
 define('TABBY_CAT_URL', plugin_dir_url(__FILE__));
 
@@ -1218,8 +1218,14 @@ function tabby_cat_get_plugin_installation() {
  */
 function tabby_cat_get_plugin_changelog() {
     return '
-        <h3>Version 1.4.1</h3>
+        <h3>Version 1.4.2</h3>
         <p><em>Released: ' . date('F j, Y') . '</em></p>
+        <ul>
+            <li>Empty shortcode results now hide the entire Divi section instead of showing a message</li>
+        </ul>
+
+        <h3>Version 1.4.1</h3>
+        <p><em>Released: February 18, 2026</em></p>
         <ul>
             <li>Tags field upgraded to checkbox selector with add-new option</li>
             <li>Category filter dropdown on admin list page</li>
@@ -1433,7 +1439,7 @@ function tabby_cat_shortcode($atts) {
     }
 
     if (empty($categories) || is_wp_error($categories)) {
-        return '<p class="tabby-cat-empty">No items to display.</p>';
+        return '<script>(function(){var s=document.currentScript,el=s;while(el&&!el.classList.contains("et_pb_section"))el=el.parentElement;if(el)el.style.display="none";})()</script>';
     }
 
     // Get all items grouped by category
@@ -1466,7 +1472,7 @@ function tabby_cat_shortcode($atts) {
     }
 
     if (empty($items_by_category)) {
-        return '<p class="tabby-cat-empty">No items to display.</p>';
+        return '<script>(function(){var s=document.currentScript,el=s;while(el&&!el.classList.contains("et_pb_section"))el=el.parentElement;if(el)el.style.display="none";})()</script>';
     }
 
     // Build output
