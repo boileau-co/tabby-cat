@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Tabby Cat
  * Description: A two-tier master-detail display component with customizable content type and categories.
- * Version: 1.3.0
+ * Version: 1.4.0
  * Author: Cozy Cat
  * Text Domain: tabby-cat
  */
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('TABBY_CAT_VERSION', '1.3.0');
+define('TABBY_CAT_VERSION', '1.4.0');
 define('TABBY_CAT_PATH', plugin_dir_path(__FILE__));
 define('TABBY_CAT_URL', plugin_dir_url(__FILE__));
 
@@ -135,6 +135,43 @@ function tabby_cat_register_taxonomy() {
     register_taxonomy('tabby_cat_category', array('tabby_cat_item'), $args);
 }
 add_action('init', 'tabby_cat_register_taxonomy');
+
+/**
+ * Category Tag Meta (for shortcode filtering)
+ */
+function tabby_cat_category_add_tag_field() {
+    ?>
+    <div class="form-field">
+        <label for="tabby_cat_tags">Tags</label>
+        <input type="text" name="tabby_cat_tags" id="tabby_cat_tags" value="">
+        <p class="description">Comma-separated tags for shortcode filtering. Example: homepage, featured</p>
+    </div>
+    <?php
+}
+add_action('tabby_cat_category_add_form_fields', 'tabby_cat_category_add_tag_field');
+
+function tabby_cat_category_edit_tag_field($term) {
+    $tags = get_term_meta($term->term_id, 'tabby_cat_tags', true);
+    ?>
+    <tr class="form-field">
+        <th scope="row"><label for="tabby_cat_tags">Tags</label></th>
+        <td>
+            <input type="text" name="tabby_cat_tags" id="tabby_cat_tags" value="<?php echo esc_attr($tags); ?>">
+            <p class="description">Comma-separated tags for shortcode filtering. Example: homepage, featured</p>
+        </td>
+    </tr>
+    <?php
+}
+add_action('tabby_cat_category_edit_form_fields', 'tabby_cat_category_edit_tag_field');
+
+function tabby_cat_save_tag_meta($term_id) {
+    if (isset($_POST['tabby_cat_tags'])) {
+        $tags = sanitize_text_field($_POST['tabby_cat_tags']);
+        update_term_meta($term_id, 'tabby_cat_tags', $tags);
+    }
+}
+add_action('created_tabby_cat_category', 'tabby_cat_save_tag_meta');
+add_action('edited_tabby_cat_category', 'tabby_cat_save_tag_meta');
 
 /**
  * Add Settings Page
@@ -600,12 +637,14 @@ function tabby_cat_render_settings_page() {
         <ul style="list-style: disc; margin-left: 20px;">
             <li><code>category</code> - Display only items from specific category slugs (comma-separated)</li>
             <li><code>exclude_category</code> - Exclude specific category slugs (comma-separated)</li>
+            <li><code>tag</code> - Show only categories with this tag (assigned in category settings)</li>
             <li><code>orderby</code> - Order items by: title, date, menu_order (default: title)</li>
             <li><code>order</code> - Order direction: ASC or DESC (default: ASC)</li>
         </ul>
-        
-        <p>Example:</p>
+
+        <p>Examples:</p>
         <code style="display: block; padding: 15px; background: #f0f0f0; margin: 10px 0;">[tabby_cat category="branding,web-design" orderby="date" order="DESC"]</code>
+        <code style="display: block; padding: 15px; background: #f0f0f0; margin: 10px 0;">[tabby_cat tag="homepage"]</code>
     </div>
     <?php
 }
@@ -656,6 +695,24 @@ function tabby_cat_admin_column_content($column, $post_id) {
     }
 }
 add_action('manage_tabby_cat_item_posts_custom_column', 'tabby_cat_admin_column_content', 10, 2);
+
+/**
+ * Add Tags column to category list table
+ */
+function tabby_cat_category_columns($columns) {
+    $columns['tabby_cat_tags'] = 'Tags';
+    return $columns;
+}
+add_filter('manage_edit-tabby_cat_category_columns', 'tabby_cat_category_columns');
+
+function tabby_cat_category_column_content($content, $column_name, $term_id) {
+    if ($column_name === 'tabby_cat_tags') {
+        $tags = get_term_meta($term_id, 'tabby_cat_tags', true);
+        return $tags ? esc_html($tags) : '&mdash;';
+    }
+    return $content;
+}
+add_filter('manage_tabby_cat_category_custom_column', 'tabby_cat_category_column_content', 10, 3);
 
 /**
  * Sync post title with item title field
@@ -1046,12 +1103,14 @@ function tabby_cat_get_plugin_installation() {
         <ul>
             <li><code>category="slug1,slug2"</code> - Only show specific categories</li>
             <li><code>exclude_category="slug"</code> - Exclude specific categories</li>
+            <li><code>tag="tag-name"</code> - Show only categories with this tag</li>
             <li><code>orderby="title|date|menu_order"</code> - Sort items (default: title)</li>
             <li><code>order="ASC|DESC"</code> - Sort direction (default: ASC)</li>
         </ul>
-        
-        <h4>Example</h4>
+
+        <h4>Examples</h4>
         <pre>[tabby_cat category="branding,web-design" orderby="date" order="DESC"]</pre>
+        <pre>[tabby_cat tag="homepage"]</pre>
     ';
 }
 
@@ -1060,6 +1119,14 @@ function tabby_cat_get_plugin_installation() {
  */
 function tabby_cat_get_plugin_changelog() {
     return '
+        <h3>Version 1.4.0</h3>
+        <p><em>Released: ' . date('F j, Y') . '</em></p>
+        <ul>
+            <li>Added tag filtering for category tabs via shortcode <code>tag</code> attribute</li>
+            <li>Tags field on category add/edit screens for assigning comma-separated tags</li>
+            <li>Tags column in category admin list table</li>
+        </ul>
+
         <h3>Version 1.3.0</h3>
         <p><em>Released: ' . date('F j, Y') . '</em></p>
         <ul>
@@ -1155,6 +1222,7 @@ function tabby_cat_shortcode($atts) {
     $atts = shortcode_atts(array(
         'category'         => '',
         'exclude_category' => '',
+        'tag'              => '',
         'orderby'          => 'title',
         'order'            => 'ASC',
     ), $atts, 'tabby_cat');
@@ -1239,6 +1307,20 @@ function tabby_cat_shortcode($atts) {
     }
 
     $categories = get_terms($tax_args);
+
+    // Filter by tag if provided
+    if (!empty($atts['tag'])) {
+        $tag_filter = strtolower(trim($atts['tag']));
+        $categories = array_filter($categories, function($category) use ($tag_filter) {
+            $tags_string = get_term_meta($category->term_id, 'tabby_cat_tags', true);
+            if (empty($tags_string)) {
+                return false;
+            }
+            $tags_array = array_map('trim', array_map('strtolower', explode(',', $tags_string)));
+            return in_array($tag_filter, $tags_array, true);
+        });
+        $categories = array_values($categories);
+    }
 
     if (empty($categories) || is_wp_error($categories)) {
         return '<p class="tabby-cat-empty">No items to display.</p>';
