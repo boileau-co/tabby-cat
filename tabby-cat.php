@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Tabby Cat
  * Description: A two-tier master-detail display component with customizable content type and categories.
- * Version: 1.4.2
+ * Version: 1.5.0
  * Author: Cozy Cat
  * Text Domain: tabby-cat
  */
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('TABBY_CAT_VERSION', '1.4.2');
+define('TABBY_CAT_VERSION', '1.5.0');
 define('TABBY_CAT_PATH', plugin_dir_path(__FILE__));
 define('TABBY_CAT_URL', plugin_dir_url(__FILE__));
 
@@ -137,10 +137,59 @@ function tabby_cat_register_taxonomy() {
 add_action('init', 'tabby_cat_register_taxonomy');
 
 /**
- * Category Tag Meta (for shortcode filtering)
+ * Tag Registry (persistent tag storage)
  */
-function tabby_cat_get_all_tags() {
-    $all_tags = array();
+function tabby_cat_get_tag_registry() {
+    $registry = get_option('tabby_cat_tags_registry', false);
+
+    // Auto-migrate from term meta on first load
+    if ($registry === false) {
+        $registry = array();
+        $terms = get_terms(array(
+            'taxonomy'   => 'tabby_cat_category',
+            'hide_empty' => false,
+        ));
+        if (!is_wp_error($terms)) {
+            foreach ($terms as $term) {
+                $tags_string = get_term_meta($term->term_id, 'tabby_cat_tags', true);
+                if (!empty($tags_string)) {
+                    $tags = array_map('trim', explode(',', $tags_string));
+                    foreach ($tags as $tag) {
+                        if (!empty($tag)) {
+                            $registry[] = $tag;
+                        }
+                    }
+                }
+            }
+        }
+        $registry = array_unique($registry);
+        sort($registry);
+        update_option('tabby_cat_tags_registry', $registry);
+    }
+
+    sort($registry);
+    return $registry;
+}
+
+function tabby_cat_add_to_registry($tag) {
+    $tag = trim($tag);
+    if (empty($tag)) {
+        return false;
+    }
+    $registry = tabby_cat_get_tag_registry();
+    $registry_lower = array_map('strtolower', $registry);
+    if (in_array(strtolower($tag), $registry_lower, true)) {
+        return false;
+    }
+    $registry[] = $tag;
+    sort($registry);
+    update_option('tabby_cat_tags_registry', $registry);
+    return true;
+}
+
+function tabby_cat_get_tag_category_count($tag) {
+    $count = 0;
+    $tag_lower = strtolower($tag);
     $terms = get_terms(array(
         'taxonomy'   => 'tabby_cat_category',
         'hide_empty' => false,
@@ -149,22 +198,21 @@ function tabby_cat_get_all_tags() {
         foreach ($terms as $term) {
             $tags_string = get_term_meta($term->term_id, 'tabby_cat_tags', true);
             if (!empty($tags_string)) {
-                $tags = array_map('trim', explode(',', $tags_string));
-                foreach ($tags as $tag) {
-                    if (!empty($tag)) {
-                        $all_tags[] = $tag;
-                    }
+                $tags_array = array_map('trim', array_map('strtolower', explode(',', $tags_string)));
+                if (in_array($tag_lower, $tags_array, true)) {
+                    $count++;
                 }
             }
         }
     }
-    $all_tags = array_unique($all_tags);
-    sort($all_tags);
-    return $all_tags;
+    return $count;
 }
 
+/**
+ * Category Tag Meta (for shortcode filtering)
+ */
 function tabby_cat_render_tag_checkboxes($selected_tags = array()) {
-    $all_tags = tabby_cat_get_all_tags();
+    $all_tags = tabby_cat_get_tag_registry();
     $selected_lower = array_map('strtolower', $selected_tags);
 
     if (!empty($all_tags)) : ?>
@@ -222,6 +270,7 @@ function tabby_cat_save_tag_meta($term_id) {
         foreach ($new_tags as $new_tag) {
             if (!empty($new_tag) && !in_array(strtolower($new_tag), array_map('strtolower', $tags), true)) {
                 $tags[] = $new_tag;
+                tabby_cat_add_to_registry($new_tag);
             }
         }
     }
@@ -242,6 +291,14 @@ function tabby_cat_add_settings_page() {
         'manage_options',
         'tabby-cat-settings',
         'tabby_cat_render_settings_page'
+    );
+    add_submenu_page(
+        'edit.php?post_type=tabby_cat_item',
+        'Manage Tags',
+        'Tags',
+        'manage_options',
+        'tabby-cat-tags',
+        'tabby_cat_render_tags_page'
     );
 }
 add_action('admin_menu', 'tabby_cat_add_settings_page');
@@ -706,6 +763,283 @@ function tabby_cat_render_settings_page() {
     </div>
     <?php
 }
+
+/**
+ * Tags Management Page
+ */
+function tabby_cat_render_tags_page() {
+    // Handle "Add New Tag" form submission
+    if (isset($_POST['tabby_cat_new_tag']) && check_admin_referer('tabby_cat_add_tag')) {
+        $new_tags = array_map('trim', explode(',', sanitize_text_field($_POST['tabby_cat_new_tag'])));
+        $added = 0;
+        foreach ($new_tags as $new_tag) {
+            if (!empty($new_tag) && tabby_cat_add_to_registry($new_tag)) {
+                $added++;
+            }
+        }
+        if ($added > 0) {
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($added === 1 ? 'Tag added.' : $added . ' tags added.') . '</p></div>';
+        } else {
+            echo '<div class="notice notice-warning is-dismissible"><p>Tag already exists or was empty.</p></div>';
+        }
+    }
+
+    $registry = tabby_cat_get_tag_registry();
+    ?>
+    <div class="wrap">
+        <h1>Manage Tags</h1>
+        <p style="color: #646970;">Tags let you control which category tabs appear in each <code>[tabby_cat]</code> shortcode. Manage all tags here — rename or delete them across all categories at once.</p>
+
+        <form method="post" style="margin: 1.5em 0;">
+            <?php wp_nonce_field('tabby_cat_add_tag'); ?>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="tabby_cat_new_tag"><strong>Add New Tag:</strong></label>
+                <input type="text" name="tabby_cat_new_tag" id="tabby_cat_new_tag" placeholder="e.g. homepage, featured" style="width: 300px;">
+                <input type="submit" class="button button-primary" value="Add Tag">
+            </div>
+            <p class="description" style="margin-top: 4px;">Separate multiple tags with commas.</p>
+        </form>
+
+        <?php if (!empty($registry)) : ?>
+        <table class="widefat striped" style="max-width: 700px;">
+            <thead>
+                <tr>
+                    <th>Tag Name</th>
+                    <th style="width: 100px; text-align: center;">Categories</th>
+                    <th style="width: 200px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tabby-tags-tbody">
+                <?php foreach ($registry as $tag) : ?>
+                <tr data-tag="<?php echo esc_attr($tag); ?>">
+                    <td>
+                        <span class="tabby-tag-name"><?php echo esc_html($tag); ?></span>
+                        <span class="tabby-tag-edit" style="display:none;">
+                            <input type="text" value="<?php echo esc_attr($tag); ?>" style="width: 200px;">
+                            <button type="button" class="button button-small tabby-tag-save">Save</button>
+                            <button type="button" class="button button-small tabby-tag-cancel">Cancel</button>
+                        </span>
+                    </td>
+                    <td style="text-align: center;"><?php echo esc_html(tabby_cat_get_tag_category_count($tag)); ?></td>
+                    <td>
+                        <button type="button" class="button button-small tabby-tag-rename">Rename</button>
+                        <button type="button" class="button button-small tabby-tag-delete" style="color: #b32d2e;">Delete</button>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php else : ?>
+            <p>No tags yet. Add one above.</p>
+        <?php endif; ?>
+    </div>
+
+    <script>
+    (function() {
+        var ajaxUrl = '<?php echo esc_url(admin_url('admin-ajax.php')); ?>';
+        var nonce = '<?php echo wp_create_nonce('tabby_cat_tags_nonce'); ?>';
+        var tbody = document.getElementById('tabby-tags-tbody');
+        if (!tbody) return;
+
+        tbody.addEventListener('click', function(e) {
+            var btn = e.target;
+            var row = btn.closest('tr');
+            if (!row) return;
+            var tag = row.getAttribute('data-tag');
+            var nameEl = row.querySelector('.tabby-tag-name');
+            var editEl = row.querySelector('.tabby-tag-edit');
+            var input = editEl ? editEl.querySelector('input') : null;
+
+            // Rename button — show inline edit
+            if (btn.classList.contains('tabby-tag-rename')) {
+                nameEl.style.display = 'none';
+                editEl.style.display = '';
+                input.value = tag;
+                input.focus();
+                row.querySelector('.tabby-tag-rename').style.display = 'none';
+                row.querySelector('.tabby-tag-delete').style.display = 'none';
+            }
+
+            // Cancel rename
+            if (btn.classList.contains('tabby-tag-cancel')) {
+                nameEl.style.display = '';
+                editEl.style.display = 'none';
+                row.querySelector('.tabby-tag-rename').style.display = '';
+                row.querySelector('.tabby-tag-delete').style.display = '';
+            }
+
+            // Save rename
+            if (btn.classList.contains('tabby-tag-save')) {
+                var newName = input.value.trim();
+                if (!newName || newName === tag) {
+                    btn.closest('tr').querySelector('.tabby-tag-cancel').click();
+                    return;
+                }
+                btn.disabled = true;
+                var fd = new FormData();
+                fd.append('action', 'tabby_cat_rename_tag');
+                fd.append('nonce', nonce);
+                fd.append('old_tag', tag);
+                fd.append('new_tag', newName);
+                fetch(ajaxUrl, { method: 'POST', body: fd })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.success) {
+                            row.setAttribute('data-tag', newName);
+                            nameEl.textContent = newName;
+                            input.value = newName;
+                            nameEl.style.display = '';
+                            editEl.style.display = 'none';
+                            row.querySelector('.tabby-tag-rename').style.display = '';
+                            row.querySelector('.tabby-tag-delete').style.display = '';
+                        } else {
+                            alert(data.data || 'Rename failed.');
+                        }
+                        btn.disabled = false;
+                    });
+            }
+
+            // Delete
+            if (btn.classList.contains('tabby-tag-delete')) {
+                if (!confirm('Delete tag "' + tag + '"? It will be removed from all categories.')) return;
+                btn.disabled = true;
+                var fd = new FormData();
+                fd.append('action', 'tabby_cat_delete_tag');
+                fd.append('nonce', nonce);
+                fd.append('tag', tag);
+                fetch(ajaxUrl, { method: 'POST', body: fd })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.success) {
+                            row.remove();
+                        } else {
+                            alert(data.data || 'Delete failed.');
+                            btn.disabled = false;
+                        }
+                    });
+            }
+        });
+    })();
+    </script>
+    <?php
+}
+
+/**
+ * AJAX: Rename tag
+ */
+function tabby_cat_ajax_rename_tag() {
+    check_ajax_referer('tabby_cat_tags_nonce', 'nonce');
+
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Permission denied.');
+    }
+
+    $old_tag = sanitize_text_field($_POST['old_tag'] ?? '');
+    $new_tag = trim(sanitize_text_field($_POST['new_tag'] ?? ''));
+
+    if (empty($old_tag) || empty($new_tag)) {
+        wp_send_json_error('Tag name cannot be empty.');
+    }
+
+    // Update registry
+    $registry = tabby_cat_get_tag_registry();
+    $registry_lower = array_map('strtolower', $registry);
+
+    // Check if new name already exists (and isn't just a case change of the same tag)
+    $new_lower = strtolower($new_tag);
+    $old_lower = strtolower($old_tag);
+    if ($new_lower !== $old_lower && in_array($new_lower, $registry_lower, true)) {
+        wp_send_json_error('A tag with that name already exists.');
+    }
+
+    // Replace in registry
+    $key = array_search($old_lower, $registry_lower, true);
+    if ($key !== false) {
+        $registry[$key] = $new_tag;
+        sort($registry);
+        update_option('tabby_cat_tags_registry', $registry);
+    }
+
+    // Update all category term meta
+    $terms = get_terms(array(
+        'taxonomy'   => 'tabby_cat_category',
+        'hide_empty' => false,
+    ));
+    if (!is_wp_error($terms)) {
+        foreach ($terms as $term) {
+            $tags_string = get_term_meta($term->term_id, 'tabby_cat_tags', true);
+            if (empty($tags_string)) {
+                continue;
+            }
+            $tags_array = array_map('trim', explode(',', $tags_string));
+            $changed = false;
+            foreach ($tags_array as &$t) {
+                if (strtolower($t) === $old_lower) {
+                    $t = $new_tag;
+                    $changed = true;
+                }
+            }
+            unset($t);
+            if ($changed) {
+                update_term_meta($term->term_id, 'tabby_cat_tags', implode(', ', $tags_array));
+            }
+        }
+    }
+
+    wp_send_json_success();
+}
+add_action('wp_ajax_tabby_cat_rename_tag', 'tabby_cat_ajax_rename_tag');
+
+/**
+ * AJAX: Delete tag
+ */
+function tabby_cat_ajax_delete_tag() {
+    check_ajax_referer('tabby_cat_tags_nonce', 'nonce');
+
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Permission denied.');
+    }
+
+    $tag = sanitize_text_field($_POST['tag'] ?? '');
+    if (empty($tag)) {
+        wp_send_json_error('Tag name cannot be empty.');
+    }
+
+    $tag_lower = strtolower($tag);
+
+    // Remove from registry
+    $registry = tabby_cat_get_tag_registry();
+    $registry = array_filter($registry, function($t) use ($tag_lower) {
+        return strtolower($t) !== $tag_lower;
+    });
+    $registry = array_values($registry);
+    update_option('tabby_cat_tags_registry', $registry);
+
+    // Remove from all category term meta
+    $terms = get_terms(array(
+        'taxonomy'   => 'tabby_cat_category',
+        'hide_empty' => false,
+    ));
+    if (!is_wp_error($terms)) {
+        foreach ($terms as $term) {
+            $tags_string = get_term_meta($term->term_id, 'tabby_cat_tags', true);
+            if (empty($tags_string)) {
+                continue;
+            }
+            $tags_array = array_map('trim', explode(',', $tags_string));
+            $filtered = array_filter($tags_array, function($t) use ($tag_lower) {
+                return strtolower($t) !== $tag_lower;
+            });
+            $new_string = implode(', ', array_values($filtered));
+            if ($new_string !== $tags_string) {
+                update_term_meta($term->term_id, 'tabby_cat_tags', $new_string);
+            }
+        }
+    }
+
+    wp_send_json_success();
+}
+add_action('wp_ajax_tabby_cat_delete_tag', 'tabby_cat_ajax_delete_tag');
 
 /**
  * Add custom columns to admin list
@@ -1218,8 +1552,16 @@ function tabby_cat_get_plugin_installation() {
  */
 function tabby_cat_get_plugin_changelog() {
     return '
-        <h3>Version 1.4.2</h3>
+        <h3>Version 1.5.0</h3>
         <p><em>Released: ' . date('F j, Y') . '</em></p>
+        <ul>
+            <li>Tag Management page: dedicated submenu for viewing, renaming, and deleting tags</li>
+            <li>Tags are now persistent — they remain available until explicitly deleted</li>
+            <li>Auto-migration from previous versions preserves existing tags</li>
+        </ul>
+
+        <h3>Version 1.4.2</h3>
+        <p><em>Released: February 18, 2026</em></p>
         <ul>
             <li>Empty shortcode results now hide the entire Divi section instead of showing a message</li>
         </ul>
