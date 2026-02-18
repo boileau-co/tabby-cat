@@ -43,13 +43,6 @@
     padding: 0;
 }
 
-/* Empty State */
-.tabby-cat-empty {
-    padding: var(--tabby-spacing-lg);
-    text-align: center;
-    color: var(--tabby-text);
-}
-
 /* =================================================================
    CATEGORY TABS (Top Level)
    ================================================================= */

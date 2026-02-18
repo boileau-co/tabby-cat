@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Tabby Cat
  * Description: A two-tier master-detail display component with customizable content type and categories.
- * Version: 1.5.0
+ * Version: 1.5.1
  * Author: Cozy Cat
  * Text Domain: tabby-cat
  */
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('TABBY_CAT_VERSION', '1.5.0');
+define('TABBY_CAT_VERSION', '1.5.1');
 define('TABBY_CAT_PATH', plugin_dir_path(__FILE__));
 define('TABBY_CAT_URL', plugin_dir_url(__FILE__));
 
@@ -1552,8 +1552,15 @@ function tabby_cat_get_plugin_installation() {
  */
 function tabby_cat_get_plugin_changelog() {
     return '
-        <h3>Version 1.5.0</h3>
+        <h3>Version 1.5.1</h3>
         <p><em>Released: ' . date('F j, Y') . '</em></p>
+        <ul>
+            <li>Empty shortcode sections are now fully removed from DOM instead of hidden</li>
+            <li>Removed unused empty state CSS</li>
+        </ul>
+
+        <h3>Version 1.5.0</h3>
+        <p><em>Released: February 18, 2026</em></p>
         <ul>
             <li>Tag Management page: dedicated submenu for viewing, renaming, and deleting tags</li>
             <li>Tags are now persistent — they remain available until explicitly deleted</li>
@@ -1781,7 +1788,7 @@ function tabby_cat_shortcode($atts) {
     }
 
     if (empty($categories) || is_wp_error($categories)) {
-        return '<script>(function(){var s=document.currentScript,el=s;while(el&&!el.classList.contains("et_pb_section"))el=el.parentElement;if(el)el.style.display="none";})()</script>';
+        return '<script>(function(){var s=document.currentScript,el=s;while(el&&!el.classList.contains("et_pb_section"))el=el.parentElement;if(el)el.remove();})()</script>';
     }
 
     // Get all items grouped by category
@@ -1814,7 +1821,7 @@ function tabby_cat_shortcode($atts) {
     }
 
     if (empty($items_by_category)) {
-        return '<script>(function(){var s=document.currentScript,el=s;while(el&&!el.classList.contains("et_pb_section"))el=el.parentElement;if(el)el.style.display="none";})()</script>';
+        return '<script>(function(){var s=document.currentScript,el=s;while(el&&!el.classList.contains("et_pb_section"))el=el.parentElement;if(el)el.remove();})()</script>';
     }
 
     // Build output
